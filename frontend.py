@@ -88,6 +88,82 @@ agent = get_sales_agent()
 # System prompt for conversation history
 SYSTEM_PROMPT = agent.system_prompt
 
+def parse_cleanlab_validation(validation_result):
+    """Parse Cleanlab validation results and extract all available data"""
+    if not validation_result or not isinstance(validation_result, dict):
+        return {}
+    
+    parsed_data = {
+        "should_guardrail": validation_result.get("should_guardrail", False),
+        "expert_answer": validation_result.get("expert_answer"),
+        "escalated_to_sme": validation_result.get("escalated_to_sme", False)
+    }
+    
+    # Try multiple ways to access the validation object
+    validation_obj = None
+    if validation_result.get("validation_object"):
+        validation_obj = validation_result["validation_object"]
+    elif validation_result.get("raw_validation_response"):
+        validation_obj = validation_result["raw_validation_response"]
+    
+    # Debug: Print what we found
+    print(f"Validation result keys: {list(validation_result.keys())}")
+    print(f"Validation object found: {validation_obj is not None}")
+    
+    if validation_obj:
+        try:
+            # Extract eval_scores - this is where the detailed scores are
+            if hasattr(validation_obj, 'eval_scores') and validation_obj.eval_scores:
+                scores_dict = {}
+                for score_name, score_obj in validation_obj.eval_scores.items():
+                    if hasattr(score_obj, 'score'):
+                        scores_dict[score_name] = score_obj.score
+                    else:
+                        scores_dict[score_name] = str(score_obj)
+                parsed_data["eval_scores"] = scores_dict
+                
+                # Also try to extract additional score details
+                detailed_scores = {}
+                for score_name, score_obj in validation_obj.eval_scores.items():
+                    detailed_scores[score_name] = {}
+                    if hasattr(score_obj, 'score'):
+                        detailed_scores[score_name]['score'] = score_obj.score
+                    if hasattr(score_obj, 'triggered'):
+                        detailed_scores[score_name]['triggered'] = score_obj.triggered
+                    if hasattr(score_obj, 'triggered_escalation'):
+                        detailed_scores[score_name]['triggered_escalation'] = score_obj.triggered_escalation
+                    if hasattr(score_obj, 'triggered_guardrail'):
+                        detailed_scores[score_name]['triggered_guardrail'] = score_obj.triggered_guardrail
+                    if hasattr(score_obj, 'failed'):
+                        detailed_scores[score_name]['failed'] = score_obj.failed
+                    if hasattr(score_obj, 'log'):
+                        detailed_scores[score_name]['log'] = score_obj.log
+                parsed_data["detailed_scores"] = detailed_scores
+            
+            # Extract deterministic_guardrails_results
+            if hasattr(validation_obj, 'deterministic_guardrails_results') and validation_obj.deterministic_guardrails_results:
+                parsed_data["guardrail_results"] = validation_obj.deterministic_guardrails_results
+            
+            # Extract log_id
+            if hasattr(validation_obj, 'log_id') and validation_obj.log_id:
+                parsed_data["log_id"] = validation_obj.log_id
+            
+            # Extract is_bad_response
+            if hasattr(validation_obj, 'is_bad_response'):
+                parsed_data["is_bad_response"] = validation_obj.is_bad_response
+            
+            # Extract any other available attributes
+            for attr in ['confidence', 'risk_level', 'flags', 'metadata']:
+                if hasattr(validation_obj, attr):
+                    value = getattr(validation_obj, attr)
+                    if value is not None:
+                        parsed_data[attr] = value
+                        
+        except Exception as e:
+            st.error(f"Error parsing validation results: {e}")
+    
+    return parsed_data
+
 # Streamlit UI
 def main():
     # Initialize session state FIRST - before any other code
@@ -115,8 +191,8 @@ def main():
         
         sample_queries = [
             "Show me qualified leads this month, their total revenue, and all their pending tasks",
-            "Show me the pipeline report by stage, then create follow-up emails for all leads in the Negotiation stage",
-            "Search for active customers, show me their details, and schedule follow-up tasks for any with opportunities closing this month"
+            "Search for customers with status Active and show me their details",
+            "Get a pipeline report by stage and show me the total value"
         ]
         
         for query in sample_queries:
@@ -164,7 +240,12 @@ def main():
             "Analytics": [
                 ("get_sales_analytics", "Show me sales analytics for this month"),
                 ("get_pipeline_report", "Get pipeline report by stage"),
-                ("get_qualified_leads_summary", "Show me qualified leads this month with revenue and tasks")
+                ("get_qualified_leads_summary", "Show me qualified leads this month with revenue and tasks"),
+                ("get_customers_closed_summary", "Show me customers closed last month and their total revenue")
+            ],
+            "Activities": [
+                ("search_activities", "When did we last meet with Innovation Corp?"),
+                ("schedule_follow_up", "Schedule follow-up for LEAD002 on 2024-02-15")
             ],
             "Communication": [
                 ("generate_sales_email", "Generate follow-up email for LEAD001"),
@@ -187,13 +268,87 @@ def main():
     
     # Display chat messages
     with chat_container:
-        for message in st.session_state.messages:
+        for i, message in enumerate(st.session_state.messages):
             with st.chat_message(message["role"]):
                 if message["role"] == "assistant":
                     st.markdown(message["content"])
-                    # Show validation info if available (minimal)
-                    if "validation" in message and message["validation"] and message["validation"].get("should_guardrail"):
-                        st.caption("⚠️ Response flagged by safety validation")
+                    
+                    # Show Cleanlab validation results in a dropdown
+                    if "validation" in message and message["validation"]:
+                        validation = parse_cleanlab_validation(message["validation"])
+                        
+                        # Create a clean dropdown for validation details
+                        with st.expander("🔍 View AI Safety Validation Results", expanded=False):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.subheader("Safety Assessment")
+                                
+                                # Guardrail status
+                                guardrail_status = "🛡️ **Guarded**" if validation.get("should_guardrail") else "✅ **Safe**"
+                                st.markdown(f"**Status:** {guardrail_status}")
+                                
+                                # Escalation status
+                                if validation.get("escalated_to_sme"):
+                                    st.markdown("**Escalation:** 🔴 **Escalated to Expert**")
+                                else:
+                                    st.markdown("**Escalation:** ✅ **No Escalation Needed**")
+                                
+                                # Error handling
+                                if validation.get("error"):
+                                    st.error(f"**Error:** {validation['error']}")
+                            
+                            with col2:
+                                st.subheader("Validation Details")
+                                
+                                # Show evaluation scores if available (these are the actual scores from Cleanlab)
+                                if validation.get("eval_scores"):
+                                    st.markdown("**Evaluation Scores:**")
+                                    for eval_name, eval_score in validation["eval_scores"].items():
+                                        if isinstance(eval_score, (int, float)):
+                                            st.markdown(f"- {eval_name}: {eval_score:.3f}")
+                                        else:
+                                            st.markdown(f"- {eval_name}: {eval_score}")
+                                
+                                # Show detailed scores with pass/fail status
+                                if validation.get("detailed_scores"):
+                                    st.markdown("**Score Status:**")
+                                    for score_name, score_details in validation["detailed_scores"].items():
+                                        if 'score' in score_details and 'failed' in score_details:
+                                            status = "❌ Failed" if score_details['failed'] else "✅ Passed"
+                                            st.markdown(f"- {score_name}: {score_details['score']:.3f} ({status})")
+                                
+                                # Show guardrail results if available
+                                if validation.get("guardrail_results"):
+                                    st.markdown("**Guardrail Results:**")
+                                    for guardrail_name, guardrail_result in validation["guardrail_results"].items():
+                                        st.markdown(f"- {guardrail_name}: {guardrail_result}")
+                                
+                                # Show if response was flagged as bad
+                                if validation.get("is_bad_response") is not None:
+                                    bad_status = "🔴 **Flagged as Bad**" if validation["is_bad_response"] else "✅ **Good Response**"
+                                    st.markdown(f"**Response Quality:** {bad_status}")
+                                
+                                # Show confidence if available
+                                if validation.get("confidence"):
+                                    st.markdown(f"**Confidence:** {validation['confidence']:.3f}")
+                                
+                                # Show risk level if available
+                                if validation.get("risk_level"):
+                                    st.markdown(f"**Risk Level:** {validation['risk_level']}")
+                                
+                                # Show expert answer if available
+                                if validation.get("expert_answer"):
+                                    st.markdown("**Expert Answer:**")
+                                    st.info(validation["expert_answer"])
+                            
+                            # Additional metadata
+                            if validation.get("validation_id") or validation.get("timestamp"):
+                                st.markdown("---")
+                                if validation.get("validation_id"):
+                                    st.caption(f"**Validation ID:** {validation['validation_id']}")
+                                if validation.get("timestamp"):
+                                    st.caption(f"**Timestamp:** {validation['timestamp']}")
                 else:
                     st.markdown(message["content"])
     
@@ -225,25 +380,65 @@ def main():
             try:
                 for iteration in range(max_iterations):
                     with st.spinner(f"🤔 Thinking... (Step {iteration + 1})"):
-                        history, continue_loop, response, extra_info = agent.process_message(
+                        result = agent.process_message(
                             user_input, current_history, st.session_state.thread_id
                         )
+                        history, continue_loop, response, extra_info = result[:4]
+                        tool_calls_info = result[4] if len(result) > 4 else []
                         current_history = history
                     
+                    # Show tool calls and their parameters (regardless of loop status)
+                    if tool_calls_info:
+                        with st.expander(f"🔧 Agent Tool Calls (Step {iteration + 1})", expanded=True):
+                            for i, tool_call in enumerate(tool_calls_info):
+                                st.markdown(f"**Tool {i+1}: {tool_call['tool_name']}**")
+                                
+                                # Display arguments
+                                if tool_call['arguments']:
+                                    st.markdown("**Parameters:**")
+                                    for key, value in tool_call['arguments'].items():
+                                        st.markdown(f"- `{key}`: `{value}`")
+                                
+                                # Display response summary
+                                if isinstance(tool_call['response'], dict):
+                                    if 'error' in tool_call['response']:
+                                        st.error(f"❌ Error: {tool_call['response']['error']}")
+                                    elif 'total_count' in tool_call['response']:
+                                        st.success(f"✅ Found {tool_call['response']['total_count']} results")
+                                    elif 'status' in tool_call['response']:
+                                        st.success(f"✅ {tool_call['response']['status']}")
+                                    else:
+                                        st.success("✅ Tool executed successfully")
+                                else:
+                                    st.success("✅ Tool executed successfully")
+                                
+                                st.markdown("---")
+                    
                     if continue_loop:
-                        # Show tool usage (minimal)
-                        tool_placeholder.caption(f"Processing step {iteration + 1}...")
+                        # Show tool usage - match the working pattern
+                        tool_placeholder.info(f"🔧 **Step {iteration + 1}:** {response}")
                         
-                        # Show validation for intermediate steps (minimal)
-                        if isinstance(extra_info, dict) and extra_info.get("should_guardrail"):
-                            st.warning("Safety alert: Response flagged by validation")
+                        # Show validation for intermediate steps
+                        if isinstance(extra_info, dict):
+                            if extra_info.get("should_guardrail"):
+                                st.warning(f"🛡️ **Safety Alert (Step {iteration + 1}):** Tool selection was flagged by Cleanlab validation")
+                            
+                            with st.expander(f"🛡️ Cleanlab Validation (Step {iteration + 1})"):
+                                st.json(extra_info)
+                        elif isinstance(extra_info, str):
+                            with st.expander(f"Tool Result (Step {iteration + 1})"):
+                                st.code(extra_info, language="json")
                     else:
                         # Final response
                         message_placeholder.markdown(response)
                         
-                        # Show validation info (minimal)
-                        if isinstance(extra_info, dict) and extra_info.get("should_guardrail"):
-                            st.warning("Safety alert: Response flagged by validation")
+                        # Show validation info - match the working pattern
+                        if isinstance(extra_info, dict):
+                            if extra_info.get("should_guardrail"):
+                                st.warning("🛡️ **Safety Alert:** This response was flagged by Cleanlab validation")
+                            
+                            with st.expander("🛡️ Cleanlab Validation Results"):
+                                st.json(extra_info)
                         
                         # Add to session state
                         assistant_message = {

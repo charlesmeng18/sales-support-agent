@@ -259,6 +259,7 @@ sales_data = {
             "status": "Active", 
             "revenue": 250000, 
             "onboarding_date": "2023-06-15",
+            "closed_date": "2023-07-20",
             "industry": "Technology",
             "company_size": "1000+",
             "location": "San Francisco, CA",
@@ -274,6 +275,7 @@ sales_data = {
             "status": "Active", 
             "revenue": 180000, 
             "onboarding_date": "2023-08-20",
+            "closed_date": "2023-09-15",
             "industry": "Consulting",
             "company_size": "200-500",
             "location": "New York, NY",
@@ -289,6 +291,7 @@ sales_data = {
             "status": "Churned", 
             "revenue": 95000, 
             "onboarding_date": "2023-03-10",
+            "closed_date": "2023-04-05",
             "industry": "SaaS",
             "company_size": "50-200",
             "location": "Austin, TX",
@@ -304,6 +307,7 @@ sales_data = {
             "status": "Active", 
             "revenue": 320000, 
             "onboarding_date": "2023-01-15",
+            "closed_date": "2023-02-10",
             "industry": "Healthcare",
             "company_size": "1000+",
             "location": "Boston, MA",
@@ -319,12 +323,93 @@ sales_data = {
             "status": "Active", 
             "revenue": 150000, 
             "onboarding_date": "2023-09-10",
+            "closed_date": "2023-10-20",
             "industry": "Manufacturing",
             "company_size": "500-1000",
             "location": "Detroit, MI",
             "account_manager": "Alex Rodriguez",
             "last_activity": "2024-01-30",
             "notes": "Manufacturing customer, supply chain optimization focus"
+        },
+        "CUST006": {
+            "name": "Financial Services Inc", 
+            "contact": "Michael Brown", 
+            "email": "michael@financialservices.com", 
+            "phone": "+1-555-6666", 
+            "status": "Active", 
+            "revenue": 450000, 
+            "onboarding_date": "2023-11-01",
+            "closed_date": "2023-12-15",
+            "industry": "Financial Services",
+            "company_size": "1000+",
+            "location": "Chicago, IL",
+            "account_manager": "Sarah Johnson",
+            "last_activity": "2024-02-10",
+            "notes": "Financial services enterprise, regulatory compliance"
+        },
+        "CUST007": {
+            "name": "Retail Chain", 
+            "contact": "Sofia Rodriguez", 
+            "email": "sofia@retailchain.com", 
+            "phone": "+1-555-7777", 
+            "status": "Active", 
+            "revenue": 280000, 
+            "onboarding_date": "2023-12-01",
+            "closed_date": "2024-01-10",
+            "industry": "Retail",
+            "company_size": "500-1000",
+            "location": "Los Angeles, CA",
+            "account_manager": "Maria Garcia",
+            "last_activity": "2024-01-15",
+            "notes": "Multi-location retail, inventory management"
+        },
+        "CUST008": {
+            "name": "Education First", 
+            "contact": "Daniel Kim", 
+            "email": "daniel@educationfirst.com", 
+            "phone": "+1-555-8888", 
+            "status": "Active", 
+            "revenue": 120000, 
+            "onboarding_date": "2024-01-05",
+            "closed_date": "2024-02-01",
+            "industry": "Education",
+            "company_size": "200-500",
+            "location": "Seattle, WA",
+            "account_manager": "David Kim",
+            "last_activity": "2024-02-20",
+            "notes": "School district, budget constraints"
+        },
+        "CUST009": {
+            "name": "CloudTech Solutions", 
+            "contact": "Nicole Taylor", 
+            "email": "nicole@cloudtech.com", 
+            "phone": "+1-555-9999", 
+            "status": "Active", 
+            "revenue": 380000, 
+            "onboarding_date": "2024-01-15",
+            "closed_date": "2024-02-20",
+            "industry": "Technology",
+            "company_size": "500-1000",
+            "location": "Seattle, WA",
+            "account_manager": "Alex Rodriguez",
+            "last_activity": "2024-03-01",
+            "notes": "Cloud migration project, large budget"
+        },
+        "CUST010": {
+            "name": "Insurance Partners", 
+            "contact": "Kevin Johnson", 
+            "email": "kevin@insurancepartners.com", 
+            "phone": "+1-555-0000", 
+            "status": "Active", 
+            "revenue": 520000, 
+            "onboarding_date": "2024-02-01",
+            "closed_date": "2024-03-01",
+            "industry": "Insurance",
+            "company_size": "1000+",
+            "location": "Hartford, CT",
+            "account_manager": "Sarah Johnson",
+            "last_activity": "2024-03-05",
+            "notes": "Claims processing system, AI integration"
         }
     },
     
@@ -552,3 +637,35 @@ def get_activities_by_lead(lead_id=None, activity_type=None):
             continue
         filtered_activities.append(activity)
     return filtered_activities
+
+def get_customers_by_close_date(timeframe: str = "last_month") -> list:
+    """Get customers closed within a specific timeframe"""
+    from datetime import datetime, timedelta
+    
+    current_date = datetime.now()
+    filtered_customers = []
+    
+    for customer_id, customer in sales_data["customers"].items():
+        if "closed_date" not in customer:
+            continue
+            
+        close_date = datetime.strptime(customer["closed_date"], "%Y-%m-%d")
+        
+        if timeframe == "last_month":
+            last_month = current_date.replace(day=1) - timedelta(days=1)
+            last_month = last_month.replace(day=1)
+            if close_date >= last_month and close_date < current_date.replace(day=1):
+                filtered_customers.append({"customer_id": customer_id, **customer})
+        elif timeframe == "this_month":
+            if close_date >= current_date.replace(day=1):
+                filtered_customers.append({"customer_id": customer_id, **customer})
+        elif timeframe == "last_quarter":
+            quarter_start = current_date.replace(day=1)
+            while quarter_start.month % 3 != 1:
+                quarter_start = quarter_start.replace(day=1) - timedelta(days=1)
+                quarter_start = quarter_start.replace(day=1)
+            quarter_start = quarter_start.replace(month=quarter_start.month - 3)
+            if close_date >= quarter_start and close_date < current_date.replace(day=1):
+                filtered_customers.append({"customer_id": customer_id, **customer})
+    
+    return filtered_customers

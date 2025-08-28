@@ -1,11 +1,11 @@
-# 🚀 AgentForce - Sales Support Agent
+# 🚀 AgentForce - Simplified Sales Support Agent
 
-A comprehensive Streamlit-based sales support agent with advanced CRM capabilities, powered by OpenAI and enhanced with Cleanlab validation for AI safety.
+A focused Streamlit-based sales support agent with core CRM capabilities, powered by OpenAI and enhanced with Cleanlab validation for AI safety.
 
-## ✨ Features
+## ✨ Core Features
 
-- **15+ Specialized Sales Tools**: Lead management, opportunity tracking, sales analytics, and more
-- **ReACT Agent Architecture**: Reasoning and Acting approach for complex sales workflows
+- **5 Essential Sales Tools**: Focused on the most important sales queries
+- **ReACT Agent Architecture**: Reasoning and Acting approach for sales workflows
 - **AI Safety Monitoring**: Cleanlab Codex integration for response validation
 - **Modern Streamlit UI**: Beautiful, responsive interface with real-time chat
 - **Context-Aware Conversations**: Maintains conversation history and context
@@ -13,31 +13,30 @@ A comprehensive Streamlit-based sales support agent with advanced CRM capabiliti
 
 ## 🛠️ Available Tools
 
-### 👥 Lead Management
-- `search_leads` - Search and filter leads by criteria
-- `create_lead` - Create new leads in the CRM
-- `update_lead_status` - Update lead status and add notes
-
-### 🎯 Opportunity Management
-- `get_opportunity_details` - Get detailed opportunity information
-- `create_opportunity` - Create new sales opportunities
-- `update_opportunity` - Update opportunity details and stage
-
 ### 🏢 Customer Management
-- `search_customers` - Search for existing customers
-- `get_customer_details` - Get detailed customer information
+- `get_customers_closed_summary` - Get customers closed within a timeframe with revenue
+- `get_customer_details` - Get detailed customer information and next steps
+- `search_customers` - Search for existing customers by name or company
 
-### 📊 Sales Analytics
-- `get_sales_analytics` - Get KPIs and pipeline metrics
-- `get_pipeline_report` - Detailed pipeline breakdown by stage
+### 📊 Pipeline & Analytics
+- `get_pipeline_report` - Get detailed pipeline breakdown with stage analysis
+- `get_sales_analytics` - Get basic sales KPIs and metrics
 
-### 📧 Communication
-- `generate_sales_email` - Generate personalized sales emails
-- `schedule_follow_up` - Schedule follow-up tasks
+## 🎯 Core Query Types
 
-### 📋 Task Management
-- `get_tasks` - Get scheduled tasks and follow-ups
-- `complete_task` - Mark tasks as completed
+The agent is optimized to handle these key sales questions:
+
+1. **"Who are our customers closed last month?"**
+   - Returns customer list, total revenue, and breakdown
+   - Uses `get_customers_closed_summary`
+
+2. **"What are next steps with customer Y?"**
+   - Returns customer details, opportunities, and actionable next steps
+   - Uses `get_customer_details`
+
+3. **"Show me total pipeline of opportunities that are active and projected to close next month"**
+   - Returns pipeline breakdown, stage analysis, and next month projections
+   - Uses `get_pipeline_report`
 
 ## 🚀 Quick Start
 
@@ -57,11 +56,27 @@ CODEX_API_KEY=your_cleanlab_codex_key_here
 CLEANLAB_PROJECT_ID=d3f73335-0fdc-4995-b1d1-a40a5d52886b
 ```
 
-### 3. Run the Application
+### 3. Test Core Functionality
+
+```bash
+python test_query.py
+```
+
+### 4. Run the Application
 
 ```bash
 streamlit run frontend.py
 ```
+
+## 🧪 Testing
+
+Run the test script to verify core functionality:
+
+```bash
+python test_query.py
+```
+
+This will test all three main query types and demonstrate the simplified tool set.
 
 ## 🚀 Streamlit Cloud Deployment
 
@@ -71,7 +86,7 @@ streamlit run frontend.py
 # Initialize git repository
 git init
 git add .
-git commit -m "Initial commit: Sales Support Agent"
+git commit -m "Initial commit: Simplified Sales Support Agent"
 git branch -M main
 git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
 git push -u origin main
@@ -101,7 +116,7 @@ The application supports multiple ways to configure API keys:
    ```bash
    export OPENAI_API_KEY="your_key"
    export CODEX_API_KEY="your_key"
-       export CLEANLAB_PROJECT_ID="your key"
+   export CLEANLAB_PROJECT_ID="your key"
    ```
 
 2. **Streamlit Secrets** (for Streamlit Cloud deployment):
@@ -127,7 +142,9 @@ The application includes optional Cleanlab Codex integration for AI safety monit
 cleanlab_salesforce_agent/
 ├── frontend.py          # Streamlit frontend application
 ├── backend.py           # Sales agent backend implementation
-├── tools.py             # Tool definitions and implementations
+├── tools.py             # Simplified tool definitions and implementations
+├── sales_db.py          # Mock CRM database
+├── test_query.py        # Test script for core functionality
 ├── requirements.txt     # Python dependencies
 ├── README.md           # This file
 └── .env                # Environment variables (create this)
@@ -135,31 +152,22 @@ cleanlab_salesforce_agent/
 
 ## 💡 Example Usage
 
-### Lead Management
+### Customer Analysis
 ```
-User: "Search for qualified leads from TechCorp"
-Agent: [Searches CRM and returns matching leads]
+User: "Who are our customers closed last month?"
+Agent: [Returns customer list, total revenue, and breakdown]
 
-User: "Create a new lead: John Doe from ABC Corp, john@abc.com"
-Agent: [Creates lead and provides confirmation]
+User: "What are next steps with TechCorp?"
+Agent: [Returns customer details, opportunities, and actionable next steps]
 ```
 
-### Sales Analytics
+### Pipeline Management
 ```
-User: "Show me sales analytics for this month"
+User: "Show me total pipeline of opportunities that are active and projected to close next month"
+Agent: [Returns pipeline breakdown, stage analysis, and next month projections]
+
+User: "Get sales analytics for this month"
 Agent: [Returns KPIs, pipeline metrics, and insights]
-
-User: "Get pipeline report by stage"
-Agent: [Provides detailed breakdown of opportunities by stage]
-```
-
-### Communication
-```
-User: "Generate follow-up email for LEAD001"
-Agent: [Creates personalized email template]
-
-User: "Schedule follow-up for LEAD002 on 2024-02-15"
-Agent: [Creates task and confirms scheduling]
 ```
 
 ## 🔒 Security Features
@@ -182,17 +190,6 @@ streamlit run frontend.py
 3. Configure secrets in Streamlit Cloud dashboard
 4. Deploy automatically
 
-### Docker (Optional)
-```dockerfile
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8501
-CMD ["streamlit", "run", "streamlit_app.py"]
-```
-
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -209,7 +206,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 For issues and questions:
 - Check the documentation
-- Review example queries in the sidebar
+- Run `python test_query.py` to verify functionality
 - Ensure all API keys are properly configured
 - Check the debug output in the console
 

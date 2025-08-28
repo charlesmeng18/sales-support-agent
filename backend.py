@@ -10,47 +10,39 @@ class SalesAgent:
         self.cleanlab_project = cleanlab_project
         self.llm_client = OpenAI(api_key=openai_api_key)
         
-        # System prompt for the agent
+        # Simplified system prompt for the agent
         self.system_prompt = {
             "role": "system",
             "content": """
-You are AgentForce, a highly capable sales assistant and CRM expert. You are professional, proactive, and results-driven.
+You are AgentForce, a focused sales assistant and CRM expert. You help answer key sales questions efficiently.
 
 Available tools:
 """ + "\n".join(f"- {t['function']['name']}: {t['function']['description']}" for t in tools) + """
 
-Your capabilities include:
-- Lead management and qualification
-- Opportunity tracking and pipeline management
-- Sales analytics and KPI reporting
-- Email generation and follow-up scheduling
-- Customer relationship management
+Your core capabilities:
+- Customer analysis and reporting
+- Pipeline management and forecasting
+- Sales analytics and KPIs
+- Customer relationship insights
+
+Key query types you handle:
+1. "Who are our customers closed last month?" - Use get_customers_closed_summary
+2. "What are next steps with customer Y?" - Use get_customer_details
+3. "Show me total pipeline of opportunities that are active and projected to close next month" - Use get_pipeline_report
 
 Instructions:
-1. Think step by step about what the user needs
-2. Use the most appropriate tools to gather information or perform actions
-3. You can use multiple tools in sequence to fully address complex requests
-4. After getting tool results, analyze them and decide if you need more information
-5. Provide comprehensive, helpful responses with specific details
-6. Always prioritize customer satisfaction and sales results
+1. Use the most appropriate tool for each query type
+2. Provide clear, actionable insights from the data
+3. Focus on the specific information requested
+4. Be concise but thorough in your responses
+5. Always include relevant metrics and next steps when appropriate
 
-IMPORTANT - Context Handling:
-- Pay close attention to the conversation history
-- When users make follow-up requests, refer back to previous messages for missing context
-- For lead searches, if a user previously mentioned criteria, use that information for follow-up queries
-- If you're missing required parameters, ask the user to clarify rather than making assumptions
-- Always maintain context from previous tool calls and results
+Example responses:
+- For customer closed reports: Include total customers, revenue, and breakdown
+- For customer details: Include opportunities, next steps, and account manager
+- For pipeline reports: Include stage breakdown, values, and next month projections
 
-Example conversation flow:
-User: "Search for qualified leads from TechCorp"
-Assistant: [searches for qualified leads from TechCorp]
-User: "Create a follow-up email for the first one"
-Assistant: [uses the lead information from previous query to generate email]
-
-Always be proactive and helpful. If a user asks about a lead, also suggest next steps. 
-If they're creating a lead, remind them to schedule follow-ups. Provide actionable insights.
-
-Use a professional but friendly tone. Be concise but thorough. Focus on driving sales results.
+Use a professional, helpful tone. Focus on driving sales insights and actionable information.
 """
         }
     
@@ -58,7 +50,7 @@ Use a professional but friendly tone. Be concise but thorough. Focus on driving 
         """Call OpenAI API with error handling"""
         try:
             resp = self.llm_client.chat.completions.create(
-                model="gpt-4.1-mini",
+                model="gpt-4o",
                 messages=messages,
                 tools=tools,
                 **kwargs
@@ -73,35 +65,30 @@ Use a professional but friendly tone. Be concise but thorough. Focus on driving 
             return {"should_guardrail": False, "expert_answer": None, "error": "Cleanlab not available"}
         
         try:
-            # Extract the response content as a string for Cleanlab validation
-            response_content = response.content
+            # Simple validate call - let the frontend handle all the parsing
+            vr = self.cleanlab_project.validate(
+                response=response.content,
+                query=query,
+                context="",
+                messages=messages,
+                metadata=metadata or {"integration": "sales-support-streamlit", "thread_id": thread_id},
+                tools=tools
+            )
             
-            validate_params = {
-                "response": response_content,  # Pass the response content as a string
-                "query": query,
-                "context": "",
-                "messages": messages,
-                "metadata": metadata or {"integration": "sales-support-streamlit", "thread_id": thread_id},
-                "tools": tools
-            }
+            # Just return the raw validation result
+            return vr
             
-            vr = self.cleanlab_project.validate(**validate_params)
-            return {
-                "should_guardrail": vr.should_guardrail,
-                "expert_answer": vr.expert_answer,
-                "escalated_to_sme": getattr(vr, 'escalated_to_sme', False)
-            }
         except Exception as e:
             return {"should_guardrail": False, "expert_answer": None, "error": str(e)}
     
     def process_message(self, user_input: str, history: list, thread_id: str):
-        """Process a user message and return response"""
+        """Process a user message and return response - simplified per-turn logic"""
         
-        # Add user input to history only if it's not already the last message
+        # Add user input to history
         if not history or not (history[-1].get("role") == "user" and history[-1].get("content") == user_input):
             history.append({"role": "user", "content": user_input})
         
-        # Query the LLM
+        # Make LLM call
         try:
             response = self.call_openai(history, temperature=0.7)
         except Exception as e:
@@ -112,37 +99,51 @@ Use a professional but friendly tone. Be concise but thorough. Focus on driving 
             validation_result = self.run_cleanlab_validation(
                 query=user_input,
                 messages=history,
-                response=response, 
+                response=response,
                 tools=tools,
                 thread_id=thread_id
             )
         except Exception as e:
             validation_result = {"should_guardrail": False, "expert_answer": None, "error": str(e)}
         
-        final_response = response
-        
-        # Convert message object to dict format for history
-        assistant_message = {
-            "role": final_response.role,
-            "content": final_response.content,
-        }
-        if hasattr(final_response, 'tool_calls') and final_response.tool_calls:
-            assistant_message["tool_calls"] = final_response.tool_calls
-        
-        # Add the LLM response to history
-        history.append(assistant_message)
-        
-        # Check if there are tool calls
-        if not final_response.tool_calls:
-            # No tool calls - conversation is complete
-            return history, False, final_response.content, validation_result
+        # Apply guardrail if needed
+        if hasattr(validation_result, 'should_guardrail') and validation_result.should_guardrail:
+            if hasattr(validation_result, 'expert_answer') and validation_result.expert_answer:
+                response_content = validation_result.expert_answer
+            else:
+                response_content = "🛡️ **Safety Alert**: I cannot provide a response to this request as it has been flagged by our safety systems."
         else:
-            # Handle tool calls
+            response_content = response.content
+        
+        # Add response to history
+        history.append({
+            "role": "assistant",
+            "content": response_content,
+            "tool_calls": getattr(response, 'tool_calls', None)
+        })
+        
+        # Check if tools needed
+        if not response.tool_calls:
+            # No tools - conversation complete
+            return history, False, response_content, validation_result
+        else:
+            # Execute tools
             tools_for_print = []
-            for tool_call in final_response.tool_calls:
+            tool_calls_info = []
+            
+            for tool_call in response.tool_calls:
                 args = json.loads(tool_call.function.arguments)
                 tool_response = TOOL_FUNCTIONS[tool_call.function.name](**args) if tool_call.function.name in TOOL_FUNCTIONS else {"error": f"Tool {tool_call.function.name} not implemented yet"}
                 
+                # Capture tool info for frontend
+                tool_call_info = {
+                    "tool_name": tool_call.function.name,
+                    "arguments": args,
+                    "response": tool_response
+                }
+                tool_calls_info.append(tool_call_info)
+                
+                # Add tool response to history
                 tool_dict = {
                     "role": "tool",
                     "tool_call_id": tool_call.id,
@@ -151,5 +152,5 @@ Use a professional but friendly tone. Be concise but thorough. Focus on driving 
                 history.append(tool_dict)
                 tools_for_print.append(tool_dict)
             
-            # Return with continue=True since we executed tools
-            return history, True, f"🔧 Executed tools: {tools_for_print}", validation_result
+            # Return with continue=True to indicate tools were executed
+            return history, True, f"🔧 Executed tools: {tools_for_print}", validation_result, tool_calls_info
